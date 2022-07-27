@@ -83,19 +83,23 @@ def find_recipients(type, name):
 def notify_recipients(recipients, new_images):
     for recipient in recipients:
         for new_image in new_images:
-            send_mail(recipient['mail'], new_image['description'], new_image['url'])
+            send_mail(recipient['mail'], new_image['description'], new_image['url'], [image_filename(new_image)])
             pass
 
 def download_images(images):
     for image in images:
-        filename = image['url'].rsplit('/', 1)[1]
-        print(filename)
+        filename = image_filename(image)
+        response = requests.get(image['url'])
+        open(filename, "wb").write(response.content)
+
+def image_filename(image):
+    return "images/"+image['url'].rsplit('/', 1)[1]
 
 
 # Thanks https://stackoverflow.com/questions/3362600/how-to-send-email-attachments
 def send_mail(send_to, subject, text, files=None):
     # assert isinstance(send_to, list)
-
+    print('*** Send Mail ***')
     msg = MIMEMultipart()
     msg['From'] = SMTP_FROM
     msg['To'] = send_to
