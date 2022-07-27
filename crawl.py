@@ -6,7 +6,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SUBSCRIBERS
 
 urls = {
     'sattelite_images': {
@@ -20,14 +20,6 @@ urls = {
 place_urls = {
     'Ammassalik': 'http://ocean.dmi.dk/arctic/ammassalik_frame_content_short.php'
 }
-
-subscribers = [
-    {
-        'mail': 'skipper@mareincognita.ch',
-        'sattelite_images': ['Ammassalik'],
-        'icecharts': []
-    }
-]
 
 known_urls_file = 'known_urls.txt'
 
@@ -71,7 +63,7 @@ def identify_new_images(images, known_urls):
 
 def find_recipients(type, name):
     recipients = []
-    for subscriber in subscribers:
+    for subscriber in SUBSCRIBERS:
         if name in subscriber[type]:
             recipients.append(subscriber)
     return recipients
