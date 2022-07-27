@@ -6,7 +6,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+from config import SMTP_FROM, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
 
 urls = {
     'sattelite_images': {
@@ -23,7 +23,7 @@ place_urls = {
 
 subscribers = [
     {
-        'mail': 'skipper@mareincognita.ch',
+        'mail': 'segeln@mareincognita.ch',
         'sattelite_images': ['Ammassalik'],
         'icecharts': []
     }
@@ -36,7 +36,7 @@ def load_known_urls():
         return set()
 
     with open(known_urls_file) as f:
-        return set(f.readlines())
+        return set(f.read().splitlines())
 
 def save_known_urls(known_urls):
     with open(known_urls_file, 'w') as f:
@@ -61,6 +61,9 @@ def crawl_for_newest_sattelite_images(url):
 
 
 def identify_new_images(images, known_urls):
+    
+    print('***Known URLS****')
+    print(known_urls)
     new_images = []
     for image in images:
         if image['url'] not in known_urls:
@@ -80,6 +83,7 @@ def find_recipients(type, name):
 def notify_recipients(recipients, new_images):
     for recipient in recipients:
         for new_image in new_images:
+            send_mail(recipient['mail'], new_image['description'], new_image['url'])
             pass
 
 def download_images(images):
@@ -90,11 +94,11 @@ def download_images(images):
 
 # Thanks https://stackoverflow.com/questions/3362600/how-to-send-email-attachments
 def send_mail(send_to, subject, text, files=None):
-    assert isinstance(send_to, list)
+    # assert isinstance(send_to, list)
 
     msg = MIMEMultipart()
     msg['From'] = SMTP_FROM
-    msg['To'] = COMMASPACE.join(send_to)
+    msg['To'] = send_to
     msg['Date'] = formatdate(localtime=True)
     msg['Subject'] = subject
 
@@ -130,15 +134,15 @@ def main():
             images = crawl_for_newest_sattelite_images(place_url)
             new_images = identify_new_images(images, known_urls)
             download_images(new_images)
-            notify_recipients(recipients, new_images)
             # Save the new urls immediately to avoid resending if the script crashes
-            known_urls.update(i['url'] for i in new_images)
+            known_urls.update(i['url'].rstrip() for i in new_images)
+            notify_recipients(recipients, new_images)
             save_known_urls(known_urls)
 
 
 if __name__ == '__main__':
-    # main()
-    send_mail(['fb@hades.ai'], 'The subject', 'Did you get this email? Best, Flo')
+    main()
+    # send_mail(['segeln@mareincognita.ch'], 'The subject', 'Did you get this email? Best, Flo')
 
 
 
