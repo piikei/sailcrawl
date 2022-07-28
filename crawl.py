@@ -6,7 +6,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SUBSCRIBERS
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SUBSCRIBERS
 
 urls = {
     'sattelite_images': {
@@ -15,10 +15,6 @@ urls = {
     'icecharts': {
 
     }
-}
-
-place_urls = {
-    'Ammassalik': 'http://ocean.dmi.dk/arctic/ammassalik_frame_content_short.php'
 }
 
 known_urls_file = 'known_urls.txt'
@@ -33,6 +29,15 @@ def load_known_urls():
 def save_known_urls(known_urls):
     with open(known_urls_file, 'w') as f:
         f.write('\n'.join(known_urls))
+
+
+def crawl_for_newest_images(type, url):
+    if type == 'sattelite_images':
+        return crawl_for_newest_sattelite_images(url)
+    elif type == 'icecharts':
+        return crawl_for_newest_icecharts(url)
+    else:
+        raise ValueError('Unknown image type: ' + str(type))
 
 
 def crawl_for_newest_sattelite_images(url):
@@ -50,6 +55,10 @@ def crawl_for_newest_sattelite_images(url):
         })
 
     return images
+
+
+def crawl_for_newest_icecharts(url):
+    return []
 
 
 def identify_new_images(images, known_urls):
@@ -114,9 +123,10 @@ def main():
     known_urls = load_known_urls()
 
     for image_type, place_url_map in urls.items():
-        for place_name, place_url in place_urls.items():
+        for place_name, place_url in place_url_map.items():
             recipients = find_recipients(image_type, place_name)
             if len(recipients) == 0:
+                # Only crawl for images that someone requested
                 continue
 
             images = crawl_for_newest_sattelite_images(place_url)
@@ -126,11 +136,11 @@ def main():
             # Save the new urls immediately to avoid resending if the script crashes
             known_urls.update(i['url'] for i in new_images)
             save_known_urls(known_urls)
+        
 
 
 if __name__ == '__main__':
-    # main()
-    send_mail(['fb@hades.ai'], 'The subject', 'Did you get this email? Best, Flo')
+    main()
 
 
 
