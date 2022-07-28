@@ -1,3 +1,5 @@
 known_urls.txt
 config.py
 config.pascal.py
+images/*
+!images/empty_folder
