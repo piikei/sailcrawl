@@ -16,7 +16,7 @@ def load_config(config_file):
     if 'known_urls_file' not in config:
         base_name = os.path.basename(config_file)
         config['known_urls_file'] = f"known_urls_{os.path.splitext(base_name)[0]}.txt"
-        print(f'** Saving Knows Urls to {config['known_urls_file']} **')
+        print(f"** Saving Knows Urls to {config['known_urls_file']} **")
     
     return config
 
