@@ -5,3 +5,6 @@ images/*
 !images/empty_folder
 .DS_Store
 __pycache__/config.cpython-39.pyc
+config-archive.json
+config.json
+known_urls_config-archive.txt
