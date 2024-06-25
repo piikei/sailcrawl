@@ -1,0 +1,23 @@
+{
+    "smtp": {
+        "host": "SMTP_HOST",
+        "port": "SMTP_PORT",
+        "user": "SMTP_USER",
+        "pass": "SMTP_PASS",
+        "from": "SMTP_FROM"
+    },
+    "subscribers": [
+        {
+            "mail": "example@example.com",
+            "sattelite_images": ["Ammassalik"],
+            "icecharts": ["SouthEast_RIC"]
+        }
+    ],
+    "upload_to_nextcloud": true,
+    "nextcloud": {
+        "url": "NEXTCLOUD_URL",
+        "username": "NEXTCLOUD_USERNAME",
+        "password": "NEXTCLOUD_PASSWORD"
+    },
+    "known_urls_file": "optional_custom_known_urls.txt"
+}

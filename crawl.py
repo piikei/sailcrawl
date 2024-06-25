@@ -6,7 +6,28 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SUBSCRIBERS
+import json
+import argparse
+
+def load_config(config_file):
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+    
+    if 'known_urls_file' not in config:
+        base_name = os.path.basename(config_file)
+        config['known_urls_file'] = f"known_urls_{os.path.splitext(base_name)[0]}.txt"
+        print(f'** Saving Knows Urls to {config['known_urls_file']} **')
+    
+    return config
+
+def upload_to_nextcloud(file_path, nextcloud_url, username, password):
+    with open(file_path, 'rb') as f:
+        response = requests.put(
+            f"{nextcloud_url}/{os.path.basename(file_path)}",
+            data=f,
+            auth=(username, password)
+        )
+    response.raise_for_status()
 
 urls = {
     'sattelite_images': {
@@ -52,19 +73,16 @@ urls = {
     }
 }
 
-known_urls_file = 'known_urls.txt'
-
-def load_known_urls():
+def load_known_urls(known_urls_file):
     if not os.path.isfile(known_urls_file):
         return set()
 
     with open(known_urls_file) as f:
         return set(f.read().splitlines())
 
-def save_known_urls(known_urls):
+def save_known_urls(known_urls, known_urls_file):
     with open(known_urls_file, 'w') as f:
         f.write('\n'.join(known_urls))
-
 
 def crawl_for_newest_images(type, url):
     if type == 'sattelite_images':
@@ -73,7 +91,6 @@ def crawl_for_newest_images(type, url):
         return crawl_for_newest_icecharts(url)
     else:
         raise ValueError('Unknown image type: ' + str(type))
-
 
 def crawl_for_newest_sattelite_images(url):
     response = requests.get(url)
@@ -90,7 +107,6 @@ def crawl_for_newest_sattelite_images(url):
         })
     return images
 
-
 def crawl_for_newest_icecharts(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.content, 'html.parser')
@@ -106,31 +122,27 @@ def crawl_for_newest_icecharts(url):
         })
     return images
 
-
 def identify_new_images(images, known_urls):
     new_images = []
     for image in images:
         if image['url'] not in known_urls:
             new_images.append(image)
-
     return new_images
 
-
-def find_recipients(type, name):
+def find_recipients(type, name, subscribers):
     recipients = []
-    for subscriber in SUBSCRIBERS:
+    for subscriber in subscribers:
         if name in subscriber[type]:
             recipients.append(subscriber)
     return recipients
 
-
-def notify_recipients(recipients, new_images, place_name):
-    # TODO: keep SMTP session alive
+def notify_recipients(recipients, new_images, place_name, smtp_config):
     for recipient in recipients:
-        for new_image in new_images:
-            subject = f"{place_name} {new_image['description']}"
-            body = new_image['url']
-            send_mail(recipient['mail'], subject, body, [image_filename(new_image)])
+        if recipient['mail']:
+            for new_image in new_images:
+                subject = f"{place_name} {new_image['description']}"
+                body = new_image['url']
+                send_mail(recipient['mail'], subject, body, [image_filename(new_image)], smtp_config)
 
 def download_images(images):
     for image in images:
@@ -140,15 +152,11 @@ def download_images(images):
             f.write(response.content)
 
 def image_filename(image):
-    return "images/"+image['url'].rsplit('/', 1)[1]
+    return "images/" + image['url'].rsplit('/', 1)[1]
 
-
-# Thanks https://stackoverflow.com/questions/3362600/how-to-send-email-attachments
-def send_mail(send_to, subject, text, files=None):
-    # assert isinstance(send_to, list)
-    print('*** Send Mail ***')
+def send_mail(send_to, subject, text, files, smtp_config):
     msg = MIMEMultipart()
-    msg['From'] = SMTP_FROM
+    msg['From'] = smtp_config['from']
     msg['To'] = send_to
     msg['Date'] = formatdate(localtime=True)
     msg['Subject'] = subject
@@ -161,26 +169,27 @@ def send_mail(send_to, subject, text, files=None):
                 fil.read(),
                 Name=os.path.basename(f)
             )
-        # After the file is closed
         part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(f)
         msg.attach(part)
 
+    smtp = smtplib.SMTP_SSL(smtp_config['host'], smtp_config['port'])
+    smtp.login(smtp_config['user'], smtp_config['pass'])
 
-    smtp = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
-    smtp.login(SMTP_USER, SMTP_PASS)
-
-    smtp.sendmail(SMTP_FROM, send_to, msg.as_string())
+    smtp.sendmail(smtp_config['from'], send_to, msg.as_string())
     smtp.close()
 
-
 def main():
-    known_urls = load_known_urls()
+    parser = argparse.ArgumentParser(description="Crawler for newest images")
+    parser.add_argument('config_file', help="Path to the configuration file")
+    args = parser.parse_args()
+
+    config = load_config(args.config_file)
+    known_urls = load_known_urls(config['known_urls_file'])
 
     for image_type, place_url_map in urls.items():
         for place_name, place_url in place_url_map.items():
-            recipients = find_recipients(image_type, place_name)
+            recipients = find_recipients(image_type, place_name, config['subscribers'])
             if len(recipients) == 0:
-                # Only crawl for images that someone requested
                 continue
 
             print(f'** Crawling {image_type} of {place_name} **')
@@ -188,11 +197,16 @@ def main():
             new_images = identify_new_images(images, known_urls)
             print(f'** Identified {len(new_images)} new images **')
             download_images(new_images)
-            notify_recipients(recipients, new_images, place_name)
+            
+            if config['upload_to_nextcloud']:
+                for image in new_images:
+                    upload_to_nextcloud(image_filename(image), config['nextcloud']['url'], config['nextcloud']['username'], config['nextcloud']['password'])
+            
+            if recipients:
+                notify_recipients(recipients, new_images, place_name, config['smtp'])
 
-            # Save the new urls immediately to avoid resending if the script crashes
             known_urls.update(i['url'].rstrip() for i in new_images)
-            save_known_urls(known_urls)
+            save_known_urls(known_urls, config['known_urls_file'])
 
 if __name__ == '__main__':
     main()
