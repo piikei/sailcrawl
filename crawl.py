@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
 import json
 import argparse
+import time
 
 def load_config(config_file):
     with open(config_file, 'r') as file:
@@ -20,14 +21,18 @@ def load_config(config_file):
     
     return config
 
-def upload_to_nextcloud(file_path, nextcloud_url, username, password):
-    with open(file_path, 'rb') as f:
-        response = requests.put(
-            f"{nextcloud_url}/{os.path.basename(file_path)}",
-            data=f,
-            auth=(username, password)
-        )
-    response.raise_for_status()
+def upload_to_nextcloud(file_path, nextcloud_url, username, password, retries=3, retry_delay=30):
+    target_url = f"{nextcloud_url.rstrip('/')}/{os.path.basename(file_path)}"
+    for attempt in range(1, retries + 1):
+        with open(file_path, 'rb') as f:
+            response = requests.put(target_url, data=f, auth=(username, password), timeout=120)
+        # 423 Locked: file is temporarily locked on the Nextcloud server, retry later
+        if response.status_code == 423 and attempt < retries:
+            print(f'** {target_url} is locked, retrying in {retry_delay}s ({attempt}/{retries}) **')
+            time.sleep(retry_delay)
+            continue
+        response.raise_for_status()
+        return
 
 urls = {
     'sattelite_images': {
@@ -200,7 +205,10 @@ def main():
             
             if config['upload_to_nextcloud']:
                 for image in new_images:
-                    upload_to_nextcloud(image_filename(image), config['nextcloud']['url'], config['nextcloud']['username'], config['nextcloud']['password'])
+                    try:
+                        upload_to_nextcloud(image_filename(image), config['nextcloud']['url'], config['nextcloud']['username'], config['nextcloud']['password'])
+                    except requests.exceptions.RequestException as e:
+                        print(f'** Upload of {image_filename(image)} to Nextcloud failed: {e} **')
             
             if recipients:
                 notify_recipients(recipients, new_images, place_name, config['smtp'])
